@@ -91,7 +91,7 @@
                   </div>
                   <div class="pool-scroll-area">
                     <div v-for="file in selectedLibraryFiles" :key="file.url" class="pool-row" @click="previewSelected(file)">
-                      <span class="p-col-folder text-ellipsis">{{ getFolderName(file.relative_url) }}</span>
+                      <span class="p-col-folder text-ellipsis">{{ getFullRelativePath(file.relative_url) }}</span>
                       <span class="p-col-name text-ellipsis" :title="file.name">{{ file.name }}</span>
                       <div class="p-col-op">
                          <el-button link type="danger" :icon="Delete" @click.stop="removeFromPool(file.url)" />
@@ -196,7 +196,11 @@ const analyzing = ref(false);
 const progress = ref(0);
 const logs = ref([]);
 
-const eventOptions = ["交通拥堵", "未按规定苫盖", "重型车辆交通事故", "人车小型事故", "车辆刮擦事故", "道路遗撒", "非法占道", "重点区域秩序维护", "货车不规范驾驶", "车辆超限识别", "城市场景目标检测"];
+const eventOptions = [
+  "交通拥堵", "未按规定苫盖", "重型车辆交通事故", "人车小型事故", 
+  "车辆刮擦事故", "道路遗撒", "非法占道", "重点区域秩序维护", 
+  "货车不规范驾驶", "车辆超限识别", "城市场景目标检测", "城市场景目标跟踪"
+];
 
 let eventSource = null;
 
@@ -213,12 +217,6 @@ const currentList = computed(() => {
 const hasImagesInCurrentDir = computed(() => currentList.value.some(i => i.type === 'image'));
 const isFileSelected = (url) => selectedLibraryFiles.value.some(f => f.url === url);
 
-// 解析目录名 (从 relative_url 中提取)
-const getFolderName = (relUrl) => {
-  if (!relUrl) return '根目录';
-  const parts = relUrl.split('/');
-  return parts.length > 1 ? parts[parts.length - 2] : '根目录';
-};
 
 onMounted(async () => {
   try { const res = await getImageLibrary(); serverImagesTree.value = res.data; }
@@ -321,6 +319,16 @@ const doStart = async () => {
 
 onUnmounted(() => { if (eventSource) eventSource.close(); });
 const getTagClass = (tag) => tag === '总结' ? 'tag-summary' : 'tag-ai';
+
+// 获取文件所在的完整相对路径（例如：2025/1月/测试组/）
+const getFullRelativePath = (relUrl) => {
+  if (!relUrl) return '/';
+  const parts = relUrl.split('/');
+  // 如果路径中没有斜杠，说明在根目录
+  if (parts.length <= 1) return '/';
+  // 移除数组最后一个元素（文件名），重新用斜杠拼接，并在末尾加上斜杠
+  return parts.slice(0, -1).join('/') + '/';
+};
 </script>
 
 <style scoped>
