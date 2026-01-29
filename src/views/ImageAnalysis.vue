@@ -2,7 +2,7 @@
   <div class="analysis-container">
     <el-row :gutter="20">
       <!-- 左侧：任务配置面板 -->
-      <el-col :span="9">
+      <el-col :span="10">
         <el-card class="side-card">
           <template #header>
             <div class="card-header">
@@ -21,13 +21,7 @@
 
             <!-- 1a. 本地上传 -->
             <div v-if="sourceType === 'local'" class="upload-wrapper">
-              <el-upload 
-                drag multiple action="#" 
-                :auto-upload="false" 
-                :on-change="onFilesChange"
-                :file-list="localFileList"
-                accept="image/*"
-              >
+              <el-upload drag multiple action="#" :auto-upload="false" :on-change="onFilesChange" :file-list="localFileList" accept="image/*">
                 <el-icon class="el-icon--upload"><upload-filled /></el-icon>
                 <div class="el-upload__text">可一次性拖拽多张图片到此处</div>
               </el-upload>
@@ -37,7 +31,7 @@
             <div v-else class="server-explorer-section">
               <div class="explorer-wrapper">
                 <!-- 面包屑导航 -->
-                <div class="explorer-nav">
+                <div class="explorer-nav flex-between">
                   <el-breadcrumb separator="/">
                     <el-breadcrumb-item @click="jumpToPath(-1)" class="clickable-nav">
                       <el-icon><HomeFilled /></el-icon> 全部素材
@@ -46,6 +40,11 @@
                       {{ folder.name }}
                     </el-breadcrumb-item>
                   </el-breadcrumb>
+                  <!-- 全选/清空本页操作 -->
+                  <div class="page-ops" v-if="hasImagesInCurrentDir">
+                    <el-button link type="primary" size="small" @click="selectAllInFolder">全选本页</el-button>
+                    <el-button link type="info" size="small" @click="clearFolderSelection">重置</el-button>
+                  </div>
                 </div>
 
                 <!-- 列表显示区 -->
@@ -77,63 +76,60 @@
                 </div>
               </div>
 
-              <!-- 已选中图片清单框 -->
-              <div v-if="selectedLibraryFiles.length > 0" class="selected-pool">
+              <!-- 已选中图片列表展示 -->
+              <div class="selected-pool" v-if="selectedLibraryFiles.length > 0">
                 <div class="pool-header">
-                  <span>已选清单 ({{ selectedLibraryFiles.length }})</span>
-                  <el-button link type="danger" size="small" @click="clearAllSelected">清空</el-button>
+                  <span class="pool-title">已选待处理清单 ({{ selectedLibraryFiles.length }})</span>
+                  <el-button link type="danger" size="small" @click="clearAllSelected">清空全部</el-button>
                 </div>
-                <div class="pool-content">
-                  <el-tag 
-                    v-for="file in selectedLibraryFiles" 
-                    :key="file.url" 
-                    closable 
-                    class="pool-tag"
-                    @close="removeFromPool(file.url)"
-                  >
-                    {{ file.name }}
-                  </el-tag>
+                
+                <div class="pool-list-container">
+                  <div class="pool-list-header">
+                    <span class="p-col-folder">目录</span>
+                    <span class="p-col-name">文件名</span>
+                    <span class="p-col-op">操作</span>
+                  </div>
+                  <div class="pool-scroll-area">
+                    <div v-for="file in selectedLibraryFiles" :key="file.url" class="pool-row" @click="previewSelected(file)">
+                      <span class="p-col-folder text-ellipsis">{{ getFolderName(file.relative_url) }}</span>
+                      <span class="p-col-name text-ellipsis" :title="file.name">{{ file.name }}</span>
+                      <div class="p-col-op">
+                         <el-button link type="danger" :icon="Delete" @click.stop="removeFromPool(file.url)" />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
 
             <el-divider />
-
-            <!-- 2. 事件多选 -->
             <el-form-item label="监控异常事件 (多选)">
               <el-select v-model="events" multiple placeholder="请勾选识别模型" style="width:100%">
                 <el-option v-for="e in eventOptions" :key="e" :label="e" :value="e" />
               </el-select>
             </el-form-item>
 
-            <!-- 3. 自然语言描述 -->
             <el-form-item label="自定义描述 (Prompt)">
               <el-input v-model="promptInput" type="textarea" :rows="3" placeholder="例如：识别一辆频繁变道的红色轿车" />
             </el-form-item>
 
-            <el-button 
-              type="primary" 
-              size="large" 
-              @click="doStart" 
-              :loading="analyzing" 
-              style="width:100%; height: 50px; margin-top: 10px;"
-            >
+            <el-button type="primary" size="large" @click="doStart" :loading="analyzing" style="width:100%; height: 50px; margin-top: 10px;">
               <el-icon v-if="!analyzing" style="margin-right: 8px"><Monitor /></el-icon>
-              {{ analyzing ? '正在执行推理分析...' : '启动智能巡检分析' }}
+              {{ analyzing ? '批量推理分析中...' : '开始批量图像识别' }}
             </el-button>
           </el-form>
         </el-card>
       </el-col>
 
       <!-- 右侧：图像预览与识别结果 -->
-      <el-col :span="15">
+      <el-col :span="14">
         <el-card class="main-card">
           <template #header>
             <div class="flex-between">
               <span>巡检图像预览</span>
               <div class="header-right">
                 <span v-if="analyzing" class="prog-text">进度: {{ progress }}%</span>
-                <el-tag :type="analyzing ? 'danger' : 'success'">{{ analyzing ? '处理中' : '准备就绪' }}</el-tag>
+                <el-tag :type="analyzing ? 'danger' : 'success'">{{ analyzing ? '正在分析' : '准备就绪' }}</el-tag>
               </div>
             </div>
           </template>
@@ -150,7 +146,6 @@
                   <div v-for="(img, idx) in resultImages" :key="idx" class="thumb-wrapper" @click="currentUrl = img">
                     <div class="thumb-item" :class="{ active: currentUrl === img }">
                       <el-image :src="img" fit="cover" lazy />
-                      <div class="thumb-no">{{ idx + 1 }}</div>
                     </div>
                     <div class="thumb-name">{{ img.split('/').pop() }}</div>
                   </div>
@@ -176,10 +171,11 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue';
-import { useRouter } from 'vue-router'; // 引入路由用于跳转
+import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { 
-  UploadFilled, Setting, Picture, FolderOpened, HomeFilled, Monitor 
+  UploadFilled, Setting, Picture, FolderOpened, 
+  HomeFilled, Monitor, Delete 
 } from '@element-plus/icons-vue';
 
 import { getImageLibrary } from '@/api/library';
@@ -191,7 +187,7 @@ const sourceType = ref('local');
 const serverImagesTree = ref([]); 
 const pathStack = ref([]); 
 const localFileList = ref([]);
-const selectedLibraryFiles = ref([]); // 存储对象列表：[{name, url, relative_url}]
+const selectedLibraryFiles = ref([]); 
 const currentUrl = ref('');
 const resultImages = ref([]); 
 const events = ref(['交通拥堵']);
@@ -200,15 +196,11 @@ const analyzing = ref(false);
 const progress = ref(0);
 const logs = ref([]);
 
-const eventOptions = [
-  "交通拥堵", "未按规定苫盖", "重型车辆交通事故", "人车小型事故", 
-  "车辆刮擦事故", "道路遗撒", "非法占道", "重点区域秩序维护", 
-  "货车不规范驾驶", "车辆超限识别", "城市场景目标检测", "城市场景目标跟踪"
-];
+const eventOptions = ["交通拥堵", "未按规定苫盖", "重型车辆交通事故", "人车小型事故", "车辆刮擦事故", "道路遗撒", "非法占道", "重点区域秩序维护", "货车不规范驾驶", "车辆超限识别", "城市场景目标检测"];
 
 let eventSource = null;
 
-// --- 列表排序与计算 ---
+// --- 列表逻辑 ---
 const currentList = computed(() => {
   let list = pathStack.value.length === 0 ? serverImagesTree.value : (pathStack.value[pathStack.value.length - 1].children || []);
   return [...list].sort((a, b) => {
@@ -218,7 +210,15 @@ const currentList = computed(() => {
   });
 });
 
+const hasImagesInCurrentDir = computed(() => currentList.value.some(i => i.type === 'image'));
 const isFileSelected = (url) => selectedLibraryFiles.value.some(f => f.url === url);
+
+// 解析目录名 (从 relative_url 中提取)
+const getFolderName = (relUrl) => {
+  if (!relUrl) return '根目录';
+  const parts = relUrl.split('/');
+  return parts.length > 1 ? parts[parts.length - 2] : '根目录';
+};
 
 onMounted(async () => {
   try { const res = await getImageLibrary(); serverImagesTree.value = res.data; }
@@ -239,12 +239,31 @@ const toggleLibrarySelect = (file) => {
   }
 };
 
+// 全选当前文件夹图片
+const selectAllInFolder = () => {
+  currentList.value.forEach(item => {
+    if (item.type === 'image' && !isFileSelected(item.url)) {
+      selectedLibraryFiles.value.push(item);
+    }
+  });
+};
+
+// 清空当前文件夹已选
+const clearFolderSelection = () => {
+  const currentDirUrls = currentList.value.filter(i => i.type === 'image').map(i => i.url);
+  selectedLibraryFiles.value = selectedLibraryFiles.value.filter(f => !currentDirUrls.includes(f.url));
+};
+
 const removeFromPool = (url) => {
   const index = selectedLibraryFiles.value.findIndex(f => f.url === url);
   if (index > -1) selectedLibraryFiles.value.splice(index, 1);
 };
 
 const clearAllSelected = () => { selectedLibraryFiles.value = []; };
+
+const previewSelected = (file) => {
+  currentUrl.value = `${backendBase}/media/image_library/${file.relative_url}`;
+};
 
 const handleSourceChange = () => {
   if (eventSource) eventSource.close();
@@ -261,36 +280,24 @@ const onFilesChange = (file, fileList) => {
   }
 };
 
-// --- SSE 推送与自动跳转 ---
+// --- SSE & Start ---
 const startSSEStatus = (taskId) => {
   if (eventSource) eventSource.close();
   eventSource = new EventSource(`${backendBase}/api/analysis/stream/${taskId}/`);
-  
   eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      progress.value = data.progress;
-      if (data.new_logs) logs.value = data.new_logs;
-      
-      if (data.result_images && data.result_images.length > 0) {
-        resultImages.value = data.result_images.map(img => `${backendBase}${img}`);
-        currentUrl.value = resultImages.value[resultImages.value.length - 1];
-      }
-
-      if (data.status === 'completed') {
-        eventSource.close();
-        analyzing.value = false;
-        ElMessage.success("分析任务圆满完成，正在跳转结果详情...");
-        // 1秒后自动跳转详情页
-        setTimeout(() => {
-          router.push(`/history/${taskId}`);
-        }, 1000);
-      } else if (data.status === 'failed') {
-        eventSource.close();
-        analyzing.value = false;
-        ElMessage.error("后台检测引擎发生异常");
-      }
-    } catch (err) { console.error(err); }
+    const data = JSON.parse(event.data);
+    progress.value = data.progress;
+    if (data.new_logs) logs.value = data.new_logs;
+    if (data.result_images && data.result_images.length > 0) {
+      resultImages.value = data.result_images.map(img => `${backendBase}${img}`);
+      currentUrl.value = resultImages.value[resultImages.value.length - 1];
+    }
+    if (data.status === 'completed') {
+      eventSource.close();
+      analyzing.value = false;
+      ElMessage.success("分析任务完成，即将跳转结果详情...");
+      setTimeout(() => { router.push(`/history/${taskId}`); }, 1500);
+    }
   };
   eventSource.onerror = () => eventSource.close();
 };
@@ -309,10 +316,7 @@ const doStart = async () => {
       prompt: promptInput.value
     });
     startSSEStatus(res.data.task_id);
-  } catch (e) {
-    analyzing.value = false;
-    ElMessage.error("后端连接异常，启动失败");
-  }
+  } catch (e) { analyzing.value = false; ElMessage.error("后端连接异常"); }
 };
 
 onUnmounted(() => { if (eventSource) eventSource.close(); });
@@ -321,47 +325,54 @@ const getTagClass = (tag) => tag === '总结' ? 'tag-summary' : 'tag-ai';
 
 <style scoped>
 .analysis-container { padding: 20px; background: #f0f2f5; min-height: 90vh; }
-.side-card, .main-card { border-radius: 8px; height: 86vh; overflow-y: auto; }
+.side-card, .main-card { border-radius: 8px; height: 88vh; overflow-y: auto; }
 
-/* 资源管理器列表样式 */
+/* 资源管理器 */
 .explorer-wrapper { border: 1px solid #dcdfe6; border-radius: 4px; background: #fff; margin-top: 10px; }
-.explorer-nav { padding: 10px; background: #f8f9fb; border-bottom: 1px solid #ebeef5; }
+.explorer-nav { padding: 8px 12px; background: #f8f9fb; border-bottom: 1px solid #ebeef5; }
 .clickable-nav { cursor: pointer; color: #409EFF; }
 .explorer-main { padding: 0; height: 180px; overflow-y: auto; }
-.list-header { display: flex; padding: 8px 15px; background: #fdfdfd; border-bottom: 1px solid #ebeef5; font-size: 11px; color: #999; }
+.list-header { display: flex; padding: 6px 15px; background: #fdfdfd; border-bottom: 1px solid #ebeef5; font-size: 11px; color: #999; }
 .col-name { flex: 3; } .col-status { flex: 1; text-align: right; }
 .list-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 15px; cursor: pointer; border-bottom: 1px solid #f2f6fc; }
 .list-row:hover { background: #f5f7fa; }
 .is-active-file { background: #f0f9eb !important; color: #67c23a; }
 .item-main { display: flex; align-items: center; flex: 3; gap: 8px; overflow: hidden; }
-.item-name-text { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item-name-text { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .icon-folder { color: #e6a23c; font-size: 16px; } .icon-image { color: #67c23a; font-size: 16px; }
 
-/* 选中清单展示盒 */
-.selected-pool { margin-top: 15px; border: 1px dashed #409EFF; border-radius: 4px; padding: 10px; background: #f0f7ff; }
-.pool-header { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #409EFF; margin-bottom: 8px; font-weight: bold; }
-.pool-content { display: flex; flex-wrap: wrap; gap: 6px; max-height: 80px; overflow-y: auto; }
-.pool-tag { border-radius: 3px; }
+/* 选中清单  */
+.selected-pool { margin-top: 15px; border: 1px solid #e1eaf2; border-radius: 4px; background: #fff; }
+.pool-header { padding: 8px 12px; background: #f0f7ff; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e1eaf2; }
+.pool-title { font-size: 12px; font-weight: bold; color: #003366; }
+.pool-list-container { padding: 0; }
+.pool-list-header { display: flex; padding: 5px 12px; background: #fafafa; font-size: 10px; color: #999; border-bottom: 1px solid #eee; }
+.pool-scroll-area { max-height: 120px; overflow-y: auto; }
+.pool-row { display: flex; align-items: center; padding: 6px 12px; border-bottom: 1px solid #f9f9f9; cursor: pointer; transition: 0.2s; }
+.pool-row:hover { background: #fdf6ec; }
+.p-col-folder { flex: 1; color: #fa8c16; font-size: 11px; }
+.p-col-name { flex: 2; font-size: 11px; color: #333; padding-left: 10px; }
+.p-col-op { flex: 0.5; text-align: right; }
+.text-ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* 预览区布局 */
+/* 预览区 */
 .result-viewer { display: flex; height: 380px; background: #000; border-radius: 8px; overflow: hidden; }
 .main-image-box { flex: 3; display: flex; align-items: center; justify-content: center; border-right: 1px solid #333; }
 .main-img { width: 100%; height: 100%; }
 .thumb-aside { flex: 1; background: #222; min-width: 180px; }
 .thumb-header { padding: 10px; color: #999; font-size: 12px; background: #1a1a1a; text-align: center; border-bottom: 1px solid #333; }
-.thumb-grid-result { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; padding: 10px; }
+.thumb-grid-result { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 10px; }
 .thumb-wrapper { display: flex; flex-direction: column; align-items: center; cursor: pointer; }
 .thumb-item { position: relative; width: 100%; aspect-ratio: 4/3; border: 2px solid transparent; border-radius: 4px; overflow: hidden; opacity: 0.7; }
 .thumb-item.active { border-color: #409EFF; opacity: 1; }
-.thumb-no { position: absolute; bottom: 2px; right: 2px; background: rgba(0,0,0,0.6); color: #fff; font-size: 10px; padding: 0 4px; border-radius: 2px; }
-.thumb-name { font-size: 10px; color: #bbb; margin-top: 4px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 70px; }
+.thumb-name { font-size: 10px; color: #bbb; margin-top: 5px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 70px; }
 
 /* 日志区 */
-.log-box { height: 180px; overflow-y: auto; background: #1e1e1e; padding: 12px; border-radius: 6px; color: #dcdcdc; }
+.log-box { height: 140px; overflow-y: auto; background: #1e1e1e; padding: 10px; border-radius: 6px; color: #dcdcdc; }
 .l-tag { padding: 2px 6px; border-radius: 3px; margin-right: 8px; font-size: 11px; color: #fff; }
 .tag-ai { background: #67C23A; } .tag-summary { background: #E6A23C; }
 
 .flex-between { display: flex; justify-content: space-between; align-items: center; }
-.prog-text { color: #409EFF; font-weight: bold; margin-right: 15px; font-size: 14px; }
+.prog-text { color: #409EFF; font-weight: bold; margin-right: 15px; font-size: 13px; }
 .bold { font-weight: bold; }
 </style>
