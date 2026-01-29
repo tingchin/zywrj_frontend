@@ -333,7 +333,11 @@ const startSSEStatus = (taskId) => {
         if (data.result_video) {
           currentUrl.value = `${backendBase}${data.result_video}?t=${new Date().getTime()}`;
         }
-        ElMessage.success("分析任务已完成");
+        ElMessage.success("分析任务已完成，正在跳转结果详情...");
+        // 1秒后自动跳转详情页
+        setTimeout(() => {
+          router.push(`/history/${taskId}`);
+        }, 1000);
       } else if (data.status === 'failed') {
         eventSource.close();
         analyzing.value = false;
